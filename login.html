@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iniciar sesión · Sistema de Capacitación MUSSI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="login-body">
+
+  <div class="login-card">
+    <h1 class="login-logo">MUSSI</h1>
+    <h2 class="login-title">Bienvenido</h2>
+    <p class="login-subtitle">Inicia sesión para acceder al sistema</p>
+
+    <form id="loginForm" class="login-form" novalidate>
+      <label for="loginUser">Usuario:</label>
+      <input type="text" id="loginUser" placeholder="Ingrese su usuario" autocomplete="username" required>
+
+      <label for="loginPass">Contraseña:</label>
+      <div class="login-pass-wrap">
+        <input type="password" id="loginPass" placeholder="Ingrese su contraseña" autocomplete="current-password" required>
+        <button type="button" id="togglePass" class="login-eye" aria-label="Mostrar contraseña">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+
+      <span class="login-error" id="loginError"></span>
+
+      <button type="submit" class="login-submit">INICIAR SESIÓN</button>
+    </form>
+
+    <p class="login-hint">Acceso interno · Front Retail / Mussi Zapatos</p>
+  </div>
+
+  <script src="auth.js"></script>
+  <script src="login.js"></script>
+</body>
+</html>

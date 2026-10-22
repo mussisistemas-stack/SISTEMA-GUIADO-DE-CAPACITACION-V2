@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Capacitación · Front Retail</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Redirige a login si no hay sesión activa (antes de pintar la página)
+  (function () {
+    try {
+      if (!sessionStorage.getItem("mussi_session")) {
+        window.location.href = "login.html";
+      }
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar__brand">
+      <div class="sidebar__logo">FR</div>
+      <div class="sidebar__brand-text">
+        <strong>Front Retail</strong>
+        <span>Capacitación</span>
+      </div>
+    </div>
+
+    <nav class="sidebar__nav">
+      <a href="#modulos" class="sidebar__link is-active" data-section="modulos">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>
+        <span>Inicio / Módulos</span>
+      </a>
+      <a href="#biblioteca" class="sidebar__link" data-section="biblioteca">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15Z"/></svg>
+        <span>Biblioteca de Recursos</span>
+      </a>
+      <a href="#soporte" class="sidebar__link" data-section="soporte">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM9.1 9a2.9 2.9 0 1 1 3.9 2.7c-.8.3-1.5.9-1.5 1.8v.5M12 17h.01"/></svg>
+        <span>Soporte Técnico</span>
+      </a>
+      <a href="#progreso" class="sidebar__link" data-section="progreso">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18M7 15l4-5 3 3 5-7"/></svg>
+        <span id="progresoNavLabel">Mi Progreso</span>
+      </a>
+      <a href="#administracion" class="sidebar__link" data-section="administracion" id="adminNavLink" style="display:none;">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <span>Administración</span>
+      </a>
+    </nav>
+
+    <div class="sidebar__footer">
+      <div class="sidebar__version">v1.0 · Uso interno</div>
+    </div>
+  </aside>
+
+  <!-- ============ OVERLAY (móvil) ============ -->
+  <div class="overlay" id="overlay"></div>
+
+  <!-- ============ CONTENIDO ============ -->
+  <div class="main">
+
+    <!-- ===== NAVBAR ===== -->
+    <header class="navbar">
+      <button class="navbar__burger" id="burgerBtn" aria-label="Abrir menú">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+
+      <h1 class="navbar__title">Sistema de Capacitación de Front Retail</h1>
+
+      <div class="navbar__user">
+        <div class="navbar__user-info">
+          <span class="navbar__user-name" id="navUserName">—</span>
+          <span class="navbar__user-role" id="navUserRole">—</span>
+        </div>
+        <div class="navbar__avatar" id="navUserAvatar">--</div>
+        <button class="navbar__logout" id="logoutBtn" title="Cerrar sesión">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ===== CONTENIDO SCROLLEABLE ===== -->
+    <main class="content">
+
+      <!-- ===== BIENVENIDA ===== -->
+      <section class="welcome" id="modulos">
+        <div class="welcome__text">
+          <h2>Hola, <span id="welcomeNombre">Asistente</span> 👋</h2>
+          <p>Bienvenido al sistema guiado de capacitación de <strong>Front Retail</strong>. Completa los módulos en orden para dominar las operaciones de punto de venta, caja y atención al cliente.</p>
+        </div>
+        <div class="welcome__stats">
+          <div class="stat-pill">
+            <span class="stat-pill__value" id="statModulos">0</span>
+            <span class="stat-pill__label">Módulos activos</span>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-pill__value" id="statProgreso">0%</span>
+            <span class="stat-pill__label">Progreso general</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== GRID DE MÓDULOS ===== -->
+      <section class="modules">
+        <div class="section-heading">
+          <h3>Módulos Operativos</h3>
+          <p>Selecciona un módulo para comenzar o continuar tu capacitación.</p>
+        </div>
+
+        <!-- Las tarjetas se generan dinámicamente desde script.js (datos en localStorage) -->
+        <div class="modules__grid" id="modulesGrid"></div>
+      </section>
+
+      <!-- ===== BIBLIOTECA DE RECURSOS ===== -->
+      <section class="resources" id="biblioteca">
+        <div class="section-heading">
+          <h3>Biblioteca de Recursos</h3>
+          <p>Manuales, guías rápidas y material de apoyo descargable.</p>
+        </div>
+        <div class="resources__grid">
+          <div class="resource-item">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6"/></svg>
+            <div>
+              <strong>Manual de Procedimientos POS</strong>
+              <span>PDF · 2.4 MB</span>
+            </div>
+          </div>
+          <div class="resource-item">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6"/></svg>
+            <div>
+              <strong>Guía de Arqueo de Caja</strong>
+              <span>PDF · 1.1 MB</span>
+            </div>
+          </div>
+          <div class="resource-item">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z M14 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/></svg>
+            <div>
+              <strong>Video: Política de Devoluciones</strong>
+              <span>MP4 · 8 min</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== SOPORTE TÉCNICO ===== -->
+      <section class="support" id="soporte">
+        <div class="section-heading">
+          <h3>Soporte Técnico</h3>
+          <p>¿Tienes un problema con el sistema? Contacta al equipo o revisa el chat de asistencia.</p>
+        </div>
+        <div class="support__card">
+          <p>Para incidencias técnicas urgentes, comunícate con la mesa de ayuda o usa el asistente virtual en la esquina inferior derecha.</p>
+          <div class="support__contact">
+            <span><strong>Correo:</strong> soporte.ti@frontretail.com</span>
+            <span><strong>Ext.:</strong> 1234</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== MI PROGRESO ===== -->
+      <section class="progress-section" id="progreso">
+        <div class="section-heading">
+          <h3 id="progresoTitulo">Mi Progreso</h3>
+          <p id="progresoSubtitulo">Resumen general de tu avance en la capacitación.</p>
+        </div>
+        <!-- Contenido generado por script.js: vista personal (aprendiz) o tabla de equipo (asesor/admin) -->
+        <div id="progresoContenido"></div>
+      </section>
+
+      <!-- ===== ADMINISTRACIÓN (solo visible para el rol Administrador) ===== -->
+      <section class="admin-section" id="administracion">
+        <div class="section-heading">
+          <h3>Administración</h3>
+          <p>Gestiona usuarios, contenido de módulos y las respuestas del asistente virtual.</p>
+        </div>
+
+        <div class="admin-tabs">
+          <button class="admin-tab is-active" data-tab="usuarios">Usuarios</button>
+          <button class="admin-tab" data-tab="contenido">Contenido</button>
+          <button class="admin-tab" data-tab="ia">Asistente IA</button>
+        </div>
+
+        <!-- ---- Gestión de Usuarios ---- -->
+        <div class="admin-panel" id="panelUsuarios" data-panel="usuarios">
+          <h4>Crear nuevo usuario</h4>
+          <form id="formUsuario" class="admin-form">
+            <div class="admin-form__row">
+              <div>
+                <label for="nuevoNombre">Nombre completo</label>
+                <input type="text" id="nuevoNombre" required>
+              </div>
+              <div>
+                <label for="nuevoUsuario">Usuario (login)</label>
+                <input type="text" id="nuevoUsuario" required>
+              </div>
+            </div>
+            <div class="admin-form__row">
+              <div>
+                <label for="nuevoPassword">Contraseña</label>
+                <input type="text" id="nuevoPassword" required>
+              </div>
+              <div>
+                <label for="nuevoRol">Rol</label>
+                <select id="nuevoRol">
+                  <option value="aprendiz">Aprendiz (personal nuevo)</option>
+                  <option value="asesor">Asesor</option>
+                  <option value="admin">Administrador</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="admin-form__permisos" id="permisosWrap">
+              <span class="admin-form__permisos-label">Permisos adicionales:</span>
+              <label class="admin-checkbox"><input type="checkbox" id="permContenido"> Agregar contenido</label>
+              <label class="admin-checkbox"><input type="checkbox" id="permIA"> Entrenar asistente IA</label>
+              <label class="admin-checkbox" id="permProgresoWrap"><input type="checkbox" id="permProgreso" checked> Ver progreso de aprendices</label>
+            </div>
+
+            <span class="admin-form__error" id="usuarioError"></span>
+            <button type="submit" class="card__btn">Crear usuario</button>
+          </form>
+
+          <table class="admin-table">
+            <thead>
+              <tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Permisos</th><th></th></tr>
+            </thead>
+            <tbody id="tablaUsuariosBody"></tbody>
+          </table>
+        </div>
+
+        <!-- ---- Gestión de Contenido ---- -->
+        <div class="admin-panel" id="panelContenido" data-panel="contenido" style="display:none;">
+          <h4>Agregar nuevo módulo</h4>
+          <p class="admin-panel__hint">Pega aquí el código embed completo que entrega Canva (el bloque HTML con el &lt;iframe&gt;), igual a como se comparte por chat.</p>
+          <form id="formContenido" class="admin-form">
+            <label for="contenidoEmbed">Código embed de Canva (HTML)</label>
+            <textarea id="contenidoEmbed" rows="5" placeholder='<div ...><iframe src="https://www.canva.com/..." ...></iframe></div>' required></textarea>
+
+            <div class="admin-form__row">
+              <div>
+                <label for="contenidoTitulo">Título del módulo</label>
+                <input type="text" id="contenidoTitulo" placeholder="Se toma del enlace de Canva si se deja vacío">
+              </div>
+              <div>
+                <label for="contenidoCategoria">Color de la tarjeta</label>
+                <select id="contenidoCategoria">
+                  <option value="pos">Verde (POS)</option>
+                  <option value="ops">Azul (Operaciones)</option>
+                  <option value="case">Naranja (Casos especiales)</option>
+                  <option value="serv">Morado (Servicio)</option>
+                  <option value="fact">Rosa (Facturación)</option>
+                  <option value="nuevo" selected>Gris (Nuevo)</option>
+                </select>
+              </div>
+            </div>
+
+            <label for="contenidoDescripcion">Descripción breve</label>
+            <textarea id="contenidoDescripcion" rows="2" placeholder="Breve descripción del contenido del módulo"></textarea>
+
+            <span class="admin-form__error" id="contenidoError"></span>
+            <button type="submit" class="card__btn">Agregar módulo</button>
+          </form>
+
+          <table class="admin-table">
+            <thead><tr><th>Módulo</th><th></th></tr></thead>
+            <tbody id="tablaModulosBody"></tbody>
+          </table>
+        </div>
+
+        <!-- ---- Entrenar Asistente IA ---- -->
+        <div class="admin-panel" id="panelIA" data-panel="ia" style="display:none;">
+          <h4>Entrenar Asistente Virtual</h4>
+          <p class="admin-panel__hint">Agrega palabras clave y la respuesta que el asistente debe dar cuando el usuario las mencione en el chat. Opcionalmente puedes adjuntar una imagen y/o enlazar un módulo para que el asistente lleve al usuario directo a él.</p>
+          <form id="formIA" class="admin-form">
+            <label for="iaKeywords">Palabras clave (separadas por coma)</label>
+            <input type="text" id="iaKeywords" placeholder="ej: traspaso, enviar mercancía" required>
+
+            <label for="iaRespuesta">Respuesta del asistente</label>
+            <textarea id="iaRespuesta" rows="3" required></textarea>
+
+            <div class="admin-form__row">
+              <div>
+                <label for="iaImagen">Imagen (opcional, máx. 1.5 MB)</label>
+                <input type="file" id="iaImagen" accept="image/*">
+                <img id="iaImagenPreview" class="admin-img-preview" style="display:none;" alt="Vista previa">
+              </div>
+              <div>
+                <label for="iaModulo">Enlazar a un módulo (opcional)</label>
+                <select id="iaModulo">
+                  <option value="">Ninguno</option>
+                </select>
+              </div>
+            </div>
+
+            <span class="admin-form__error" id="iaError"></span>
+            <button type="submit" class="card__btn">Agregar respuesta</button>
+          </form>
+
+          <table class="admin-table">
+            <thead><tr><th>Palabras clave</th><th>Respuesta</th><th>Imagen</th><th>Módulo</th><th></th></tr></thead>
+            <tbody id="tablaIABody"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ============ CHAT FLOTANTE ============ -->
+  <button class="chat-fab" id="chatFab" aria-label="Abrir asistente virtual">
+    <svg class="icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+  </button>
+
+  <div class="chat-window" id="chatWindow">
+    <div class="chat-window__header">
+      <div class="chat-window__header-info">
+        <div class="chat-window__avatar">🤖</div>
+        <div>
+          <strong>Asistente Virtual de Soporte</strong>
+          <span>En línea</span>
+        </div>
+      </div>
+      <button class="chat-window__close" id="chatCloseBtn" aria-label="Cerrar chat">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="chat-window__messages" id="chatMessages">
+      <div class="chat-msg chat-msg--bot">
+        <p>¡Hola! Soy tu asistente virtual de Front Retail. ¿En qué puedo ayudarte hoy?</p>
+      </div>
+      <div class="chat-msg chat-msg--bot">
+        <p>Puedes preguntarme, por ejemplo: <em>"¿Cómo hago un cambio?"</em> o <em>"¿Cómo proceso una devolución?"</em></p>
+      </div>
+    </div>
+
+    <div class="chat-window__quick">
+      <button class="quick-btn" data-question="¿Cómo hago una devolución?">Devoluciones</button>
+      <button class="quick-btn" data-question="¿Cómo abro la caja?">Apertura de caja</button>
+      <button class="quick-btn" data-question="¿Con quién hablo si el POS falla?">Falla del POS</button>
+    </div>
+
+    <form class="chat-window__input" id="chatForm">
+      <input type="text" id="chatInput" placeholder="Escribe tu pregunta..." autocomplete="off">
+      <button type="submit" aria-label="Enviar mensaje">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      </button>
+    </form>
+  </div>
+
+  <script src="auth.js"></script>
+  <script src="app-data.js"></script>
+  <script src="script.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

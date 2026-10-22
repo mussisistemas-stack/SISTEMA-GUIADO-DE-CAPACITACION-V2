@@ -1,0 +1,12 @@
+{
+  "name": "sistema-capacitacion-front-retail",
+  "version": "1.0.0",
+  "description": "Sistema de Capacitación de Front Retail - Onboarding personal de soporte",
+  "private": true,
+  "scripts": {
+    "start": "serve -l 5500 ."
+  },
+  "devDependencies": {
+    "serve": "^14.2.3"
+  }
+}
