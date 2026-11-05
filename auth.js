@@ -1,125 +1,110 @@
 /* ==========================================================================
    auth.js
-   Gestión de usuarios, sesión y permisos.
+   Comunicación con el servidor (server.js): sesión, usuarios y permisos.
 
-   IMPORTANTE: esta app es 100% estática (sin backend/base de datos real).
-   Los usuarios y contraseñas se guardan en el localStorage del navegador
-   de este equipo. Sirve como control de acceso interno básico, NO como
-   autenticación segura de nivel productivo (las contraseñas no están
-   cifradas). No reutilizar contraseñas sensibles aquí.
+   El login se valida en el servidor. La sesión viaja en una cookie segura
+   (HttpOnly) que el navegador envía sola en cada petición; las contraseñas
+   se guardan cifradas en el servidor, nunca en el navegador.
    ========================================================================== */
 
-const AUTH_USERS_KEY = "mussi_users";
-const AUTH_SESSION_KEY = "mussi_session";
+const NOMBRES_ROL = {
+  admin: "Administrador",
+  asesor: "Asesor",
+  aprendiz: "Aprendiz"
+};
 
-/* ---------- Semilla del usuario Administrador ---------- */
+let SESION = null;
+let USUARIOS_CACHE = [];
 
-function seedDefaultUsers() {
-  if (localStorage.getItem(AUTH_USERS_KEY)) return;
+/* ---------- Helper de API ---------- */
 
-  const admin = {
-    id: "u-admin",
-    nombre: "Administrador",
-    usuario: "admin",
-    password: "Mussi26#",
-    rol: "admin",
-    permisos: { contenido: true, ia: true, progreso: true }
-  };
-
-  localStorage.setItem(AUTH_USERS_KEY, JSON.stringify([admin]));
-}
-
-/* ---------- CRUD de usuarios ---------- */
-
-function getUsuarios() {
-  seedDefaultUsers();
-  return JSON.parse(localStorage.getItem(AUTH_USERS_KEY) || "[]");
-}
-
-function guardarUsuarios(usuarios) {
-  localStorage.setItem(AUTH_USERS_KEY, JSON.stringify(usuarios));
-}
-
-function crearUsuario({ nombre, usuario, password, rol, permisos }) {
-  const usuarios = getUsuarios();
-
-  if (usuarios.some((u) => u.usuario.toLowerCase() === usuario.trim().toLowerCase())) {
-    throw new Error("Ya existe un usuario con ese nombre de usuario.");
-  }
-
-  const nuevo = {
-    id: "u-" + Date.now(),
-    nombre: nombre.trim(),
-    usuario: usuario.trim(),
-    password,
-    rol,
-    permisos:
-      rol === "admin"
-        ? { contenido: true, ia: true, progreso: true }
-        : {
-            contenido: !!permisos.contenido,
-            ia: !!permisos.ia,
-            progreso: !!permisos.progreso
-          }
-  };
-
-  usuarios.push(nuevo);
-  guardarUsuarios(usuarios);
-  return nuevo;
-}
-
-function eliminarUsuario(id) {
-  const usuarios = getUsuarios();
-  const objetivo = usuarios.find((u) => u.id === id);
-
-  if (objetivo && objetivo.rol === "admin") {
-    const admins = usuarios.filter((u) => u.rol === "admin");
-    if (admins.length <= 1) {
-      throw new Error("Debe existir al menos un administrador. No se puede eliminar el último.");
+/**
+ * Llama a la API del servidor y devuelve el JSON de respuesta.
+ * Si la sesión expiró, redirige al login (salvo que se indique lo contrario).
+ */
+async function api(url, opciones) {
+  opciones = opciones || {};
+  const init = { method: opciones.method || "GET", headers: {}, cache: "no-store" };
+  if (opciones.body !== undefined) {
+    if (opciones.body instanceof Blob) {
+      init.body = opciones.body;
+      init.headers["Content-Type"] = opciones.body.type || "application/octet-stream";
+    } else {
+      init.body = JSON.stringify(opciones.body);
+      init.headers["Content-Type"] = "application/json";
     }
   }
 
-  guardarUsuarios(usuarios.filter((u) => u.id !== id));
+  let res;
+  try {
+    res = await fetch(url, init);
+  } catch (e) {
+    throw new Error("No hay conexión con el servidor. Verifica que esté encendido (iniciar-servidor.bat).");
+  }
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (e) {}
+
+  if (res.status === 401 && !opciones.sinRedireccion) {
+    window.location.href = "login.html";
+    throw new Error((data && data.error) || "Sesión expirada.");
+  }
+  if (!res.ok) {
+    throw new Error((data && data.error) || "Error del servidor (" + res.status + ").");
+  }
+  return data;
 }
 
 /* ---------- Sesión ---------- */
 
-function login(usuario, password) {
-  const usuarios = getUsuarios();
-  const encontrado = usuarios.find(
-    (u) => u.usuario.toLowerCase() === usuario.trim().toLowerCase() && u.password === password
-  );
-  if (!encontrado) return null;
+async function login(usuario, password) {
+  SESION = await api("/api/login", { method: "POST", body: { usuario, password }, sinRedireccion: true });
+  return SESION;
+}
 
-  const sesion = {
-    id: encontrado.id,
-    nombre: encontrado.nombre,
-    usuario: encontrado.usuario,
-    rol: encontrado.rol,
-    permisos: encontrado.permisos
-  };
-
-  sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(sesion));
-  return sesion;
+/** Consulta la sesión activa en el servidor. Devuelve null si no hay. */
+async function cargarSesion() {
+  try {
+    SESION = await api("/api/sesion", { sinRedireccion: true });
+  } catch (e) {
+    SESION = null;
+  }
+  return SESION;
 }
 
 function getSesion() {
-  const raw = sessionStorage.getItem(AUTH_SESSION_KEY);
-  return raw ? JSON.parse(raw) : null;
+  return SESION;
 }
 
-function logout() {
-  sessionStorage.removeItem(AUTH_SESSION_KEY);
+async function logout() {
+  try {
+    await api("/api/logout", { method: "POST", sinRedireccion: true });
+  } catch (e) {}
   window.location.href = "login.html";
 }
 
-function requerirSesion() {
-  const sesion = getSesion();
-  if (!sesion) {
-    window.location.href = "login.html";
-    return null;
-  }
-  return sesion;
+/* ---------- Usuarios ---------- */
+
+async function cargarUsuariosServidor() {
+  USUARIOS_CACHE = (await api("/api/usuarios")) || [];
+  return USUARIOS_CACHE;
+}
+
+function getUsuarios() {
+  return USUARIOS_CACHE;
+}
+
+async function crearUsuario(datos) {
+  const nuevo = await api("/api/usuarios", { method: "POST", body: datos });
+  await cargarUsuariosServidor();
+  return nuevo;
+}
+
+async function eliminarUsuario(id) {
+  await api("/api/usuarios/" + encodeURIComponent(id), { method: "DELETE" });
+  await cargarUsuariosServidor();
 }
 
 /* ---------- Helpers de rol / permisos ---------- */
@@ -131,9 +116,3 @@ function esAdmin(sesion) {
 function tienePermiso(sesion, permiso) {
   return !!sesion && (sesion.rol === "admin" || (sesion.permisos && sesion.permisos[permiso]));
 }
-
-const NOMBRES_ROL = {
-  admin: "Administrador",
-  asesor: "Asesor",
-  aprendiz: "Aprendiz"
-};

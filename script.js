@@ -5,18 +5,31 @@
    desde el panel de Administración).
    ========================================================================== */
 
-const MODULES_KEY = "mussi_modules";
-const CHAT_KB_KEY = "mussi_chat_kb";
-const PROGRESS_KEY = "mussi_progress";
-
+/* Todos los datos viven en el servidor (server.js). Aquí se guarda una copia
+   en memoria que se carga al entrar y se actualiza tras cada cambio. */
 let sesionActual = null;
+let MODULOS_CACHE = [];
+let CHAT_KB_CACHE = [];
+let PROGRESO_CACHE = {};
 
-document.addEventListener("DOMContentLoaded", () => {
-  sesionActual = requerirSesion();
-  if (!sesionActual) return; // ya redirigido a login.html
+document.addEventListener("DOMContentLoaded", async () => {
+  sesionActual = await cargarSesion();
+  if (!sesionActual) {
+    window.location.href = "login.html";
+    return;
+  }
 
-  seedModulosSiNecesario();
-  seedChatKbSiNecesario();
+  try {
+    await Promise.all([
+      cargarModulosServidor(),
+      cargarChatKbServidor(),
+      cargarProgresoServidor(),
+      tienePermiso(sesionActual, "progreso") ? cargarUsuariosServidor() : null
+    ]);
+  } catch (e) {
+    alert("No se pudieron cargar los datos del servidor: " + e.message);
+  }
+  if (typeof KBDocs !== "undefined") KBDocs.recargar(); // índice de documentos del asistente
 
   inicializarNavbarYSidebar();
   inicializarSidebarMovil();
@@ -25,6 +38,9 @@ document.addEventListener("DOMContentLoaded", () => {
   renderProgreso();
   actualizarStatsBienvenida();
   inicializarChat();
+
+  // Avisa a admin.js que la sesión y los datos ya están listos
+  document.dispatchEvent(new Event("app:lista"));
 });
 
 /* ==========================================================
@@ -129,45 +145,56 @@ function inicializarLogout() {
 }
 
 /* ==========================================================
-   MÓDULOS (datos en localStorage)
+   MÓDULOS (servidor: /api/modulos)
    ========================================================== */
 
-function seedModulosSiNecesario() {
-  if (!localStorage.getItem(MODULES_KEY)) {
-    localStorage.setItem(MODULES_KEY, JSON.stringify(DEFAULT_MODULES));
-  }
+async function cargarModulosServidor() {
+  MODULOS_CACHE = (await api("/api/modulos")) || [];
+  return MODULOS_CACHE;
 }
 
 function cargarModulos() {
-  seedModulosSiNecesario();
-  return JSON.parse(localStorage.getItem(MODULES_KEY) || "[]");
+  return MODULOS_CACHE;
 }
 
-function guardarModulos(modulos) {
-  localStorage.setItem(MODULES_KEY, JSON.stringify(modulos));
+async function crearModulo(datos) {
+  const nuevo = await api("/api/modulos", { method: "POST", body: datos });
+  await cargarModulosServidor();
+  return nuevo;
 }
 
-function eliminarModulo(id) {
-  guardarModulos(cargarModulos().filter((m) => m.id !== id));
+async function eliminarModulo(id) {
+  await api("/api/modulos/" + encodeURIComponent(id), { method: "DELETE" });
+  await Promise.all([cargarModulosServidor(), cargarProgresoServidor(), cargarChatKbServidor()]);
 }
 
 /* ==========================================================
-   PROGRESO (por usuario, en localStorage)
+   PROGRESO (servidor: /api/progreso)
    ========================================================== */
 
+async function cargarProgresoServidor() {
+  PROGRESO_CACHE = (await api("/api/progreso")) || {};
+  return PROGRESO_CACHE;
+}
+
 function cargarProgresoGlobal() {
-  return JSON.parse(localStorage.getItem(PROGRESS_KEY) || "{}");
+  return PROGRESO_CACHE;
 }
 
 function progresoDeUsuario(usuario) {
-  return cargarProgresoGlobal()[usuario] || {};
+  return PROGRESO_CACHE[usuario] || {};
 }
 
-function marcarModulo(moduloId, completado) {
-  const todos = cargarProgresoGlobal();
-  if (!todos[sesionActual.usuario]) todos[sesionActual.usuario] = {};
-  todos[sesionActual.usuario][moduloId] = completado;
-  localStorage.setItem(PROGRESS_KEY, JSON.stringify(todos));
+async function marcarModulo(moduloId, completado) {
+  try {
+    PROGRESO_CACHE[sesionActual.usuario] = await api("/api/progreso/" + encodeURIComponent(moduloId), {
+      method: "PUT",
+      body: { completado }
+    });
+  } catch (e) {
+    alert("No se pudo guardar tu progreso: " + e.message);
+    return;
+  }
   renderModulos();
   renderProgreso();
   actualizarStatsBienvenida();
@@ -336,19 +363,24 @@ function renderProgreso() {
    CHAT FLOTANTE (con base de conocimiento editable)
    ========================================================== */
 
-function seedChatKbSiNecesario() {
-  if (!localStorage.getItem(CHAT_KB_KEY)) {
-    localStorage.setItem(CHAT_KB_KEY, JSON.stringify(DEFAULT_CHAT_KB));
-  }
+async function cargarChatKbServidor() {
+  CHAT_KB_CACHE = (await api("/api/chat-kb")) || [];
+  return CHAT_KB_CACHE;
 }
 
 function cargarChatKb() {
-  seedChatKbSiNecesario();
-  return JSON.parse(localStorage.getItem(CHAT_KB_KEY) || "[]");
+  return CHAT_KB_CACHE;
 }
 
-function guardarChatKb(kb) {
-  localStorage.setItem(CHAT_KB_KEY, JSON.stringify(kb));
+async function crearEntradaChatKb(datos) {
+  const nueva = await api("/api/chat-kb", { method: "POST", body: datos });
+  await cargarChatKbServidor();
+  return nueva;
+}
+
+async function eliminarEntradaChatKb(id) {
+  await api("/api/chat-kb/" + encodeURIComponent(id), { method: "DELETE" });
+  await cargarChatKbServidor();
 }
 
 const RESPUESTA_DEFAULT_BOT =
@@ -374,6 +406,12 @@ function generarRespuesta(pregunta) {
         moduloId: item.moduloId || ""
       };
     }
+  }
+
+  // Si no hay respuesta manual, buscar en los documentos de entrenamiento
+  if (typeof KBDocs !== "undefined") {
+    const desdeDocs = KBDocs.responder(pregunta);
+    if (desdeDocs) return desdeDocs;
   }
 
   return { respuesta: RESPUESTA_DEFAULT_BOT, imagen: "", moduloId: "" };
@@ -412,6 +450,16 @@ function inicializarChat() {
     p.textContent = texto;
     msg.appendChild(p);
 
+    if (extra.fuente) {
+      const fuente = document.createElement("span");
+      fuente.className = "chat-msg__source";
+      fuente.textContent = "📄 Fuente: " + extra.fuente;
+      if (extra.otrasFuentes && extra.otrasFuentes.length) {
+        fuente.textContent += " · También en: " + extra.otrasFuentes.join(", ");
+      }
+      msg.appendChild(fuente);
+    }
+
     if (extra.imagen) {
       const img = document.createElement("img");
       img.src = extra.imagen;
@@ -448,8 +496,8 @@ function inicializarChat() {
     chatInput.value = "";
 
     setTimeout(() => {
-      const { respuesta, imagen, moduloId } = generarRespuesta(textoLimpio);
-      addMessage(respuesta, "bot", { imagen, moduloId });
+      const r = generarRespuesta(textoLimpio);
+      addMessage(r.respuesta, "bot", r);
     }, 500);
   }
 

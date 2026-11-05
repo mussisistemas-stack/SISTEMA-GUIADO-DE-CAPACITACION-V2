@@ -2,10 +2,12 @@
    admin.js
    Panel de Administración: gestión de usuarios, gestión de contenido
    (pegar el embed de Canva desde la app) y entrenamiento del asistente IA.
-   Todo se guarda en localStorage vía las funciones de auth.js / script.js.
+   Todo se guarda en el servidor (server.js) vía las funciones de auth.js /
+   script.js / kb-docs.js.
    ========================================================================== */
 
-document.addEventListener("DOMContentLoaded", () => {
+// script.js dispara "app:lista" cuando la sesión y los datos del servidor están cargados
+document.addEventListener("app:lista", () => {
   const sesion = getSesion();
   if (!sesion || !esAdmin(sesion)) return; // el panel completo es exclusivo del Administrador
 
@@ -13,11 +15,93 @@ document.addEventListener("DOMContentLoaded", () => {
   inicializarFormUsuario();
   inicializarFormContenido();
   inicializarFormIA();
+  inicializarDocumentosIA();
 
   renderTablaUsuarios();
   renderTablaModulosAdmin();
   renderTablaIA();
+  renderTablaKb();
+
+  migrarDatosLocales();
 });
+
+/* ==========================================================
+   MIGRACIÓN: datos que quedaron en el navegador (versión anterior)
+   ========================================================== */
+
+const CLAVES_LOCALES = {
+  usuarios: "mussi_users",
+  modulos: "mussi_modules",
+  chatKb: "mussi_chat_kb",
+  progreso: "mussi_progress"
+};
+
+function leerLocal(clave) {
+  try {
+    const raw = localStorage.getItem(clave);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function migrarDatosLocales() {
+  const avisos = [];
+
+  // 1) Usuarios, módulos, respuestas manuales y progreso
+  try {
+    const datos = {};
+    Object.entries(CLAVES_LOCALES).forEach(([k, clave]) => {
+      const v = leerLocal(clave);
+      if (v) datos[k] = v;
+    });
+
+    if (Object.keys(datos).length) {
+      const r = await api("/api/migrar", { method: "POST", body: datos });
+      Object.values(CLAVES_LOCALES).forEach((clave) => {
+        try {
+          localStorage.removeItem(clave);
+        } catch (e) {}
+      });
+
+      const partes = [];
+      if (r.usuarios) partes.push(`${r.usuarios} usuario(s)`);
+      if (r.modulos) partes.push(`${r.modulos} módulo(s)`);
+      if (r.respuestas) partes.push(`${r.respuestas} respuesta(s) del asistente`);
+      if (r.progreso) partes.push(`${r.progreso} registro(s) de progreso`);
+      if (partes.length) {
+        avisos.push(partes.join(", "));
+        await Promise.all([cargarUsuariosServidor(), cargarModulosServidor(), cargarChatKbServidor(), cargarProgresoServidor()]);
+        refrescarTodo();
+      }
+    }
+  } catch (e) {
+    console.warn("No se pudieron migrar los datos locales:", e);
+  }
+
+  // 2) Documentos guardados en IndexedDB
+  try {
+    const n = typeof KBDocs !== "undefined" ? await KBDocs.migrarLocales() : 0;
+    if (n) {
+      avisos.push(`${n} documento(s)`);
+      renderTablaKb();
+    }
+  } catch (e) {}
+
+  if (avisos.length) {
+    alert("Se pasaron al servidor compartido datos que estaban guardados solo en este equipo: " + avisos.join(" y ") + ".");
+  }
+}
+
+function refrescarTodo() {
+  renderModulos();
+  renderProgreso();
+  actualizarStatsBienvenida();
+  renderTablaUsuarios();
+  renderTablaModulosAdmin();
+  renderTablaIA();
+  poblarSelectModulosIA();
+}
 
 /* ==========================================================
    TABS DEL PANEL
@@ -37,6 +121,16 @@ function inicializarTabsAdmin() {
       });
     });
   });
+}
+
+/* Deshabilita un botón mientras corre una acción asíncrona */
+async function conBoton(boton, accion) {
+  if (boton) boton.disabled = true;
+  try {
+    return await accion();
+  } finally {
+    if (boton) boton.disabled = false;
+  }
 }
 
 /* ==========================================================
@@ -64,7 +158,7 @@ function inicializarFormUsuario() {
   rolSelect.addEventListener("change", actualizarPermisosSegunRol);
   actualizarPermisosSegunRol();
 
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     errorEl.textContent = "";
 
@@ -79,17 +173,19 @@ function inicializarFormUsuario() {
     }
 
     try {
-      crearUsuario({
-        nombre,
-        usuario,
-        password,
-        rol,
-        permisos: {
-          contenido: permContenido.checked,
-          ia: permIA.checked,
-          progreso: permProgreso.checked
-        }
-      });
+      await conBoton(form.querySelector("button[type=submit]"), () =>
+        crearUsuario({
+          nombre,
+          usuario,
+          password,
+          rol,
+          permisos: {
+            contenido: permContenido.checked,
+            ia: permIA.checked,
+            progreso: permProgreso.checked
+          }
+        })
+      );
     } catch (err) {
       errorEl.textContent = err.message;
       return;
@@ -98,6 +194,7 @@ function inicializarFormUsuario() {
     form.reset();
     actualizarPermisosSegunRol();
     renderTablaUsuarios();
+    renderProgreso();
   });
 }
 
@@ -117,20 +214,21 @@ function renderTablaUsuarios() {
         <tr>
           <td>${escapeHtml(u.nombre)}</td>
           <td>${escapeHtml(u.usuario)}</td>
-          <td>${NOMBRES_ROL[u.rol] || u.rol}</td>
+          <td>${NOMBRES_ROL[u.rol] || escapeHtml(u.rol)}</td>
           <td>${escapeHtml(permisosTexto)}</td>
-          <td><button class="table-delete-btn" data-user-id="${u.id}" title="Eliminar usuario">✕</button></td>
+          <td><button class="table-delete-btn" data-user-id="${escapeHtml(u.id)}" title="Eliminar usuario">✕</button></td>
         </tr>
       `;
     })
     .join("");
 
   tbody.querySelectorAll("[data-user-id]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       if (!confirm("¿Eliminar este usuario?")) return;
       try {
-        eliminarUsuario(btn.dataset.userId);
+        await conBoton(btn, () => eliminarUsuario(btn.dataset.userId));
         renderTablaUsuarios();
+        renderProgreso();
       } catch (err) {
         alert(err.message);
       }
@@ -160,7 +258,7 @@ function inicializarFormContenido() {
   const form = document.getElementById("formContenido");
   const errorEl = document.getElementById("contenidoError");
 
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     errorEl.textContent = "";
 
@@ -175,25 +273,28 @@ function inicializarFormContenido() {
     const tituloInput = document.getElementById("contenidoTitulo").value.trim();
     const descripcionInput = document.getElementById("contenidoDescripcion").value.trim();
 
-    const nuevoModulo = {
-      id: "mod-" + Date.now(),
-      titulo: tituloInput || tituloLink || "Nuevo módulo",
-      descripcion: descripcionInput || "Contenido agregado desde el panel de administración.",
-      categoria: document.getElementById("contenidoCategoria").value,
-      embedSrc: src,
-      fuente: fuente && /^https:\/\//i.test(fuente) ? fuente : ""
-    };
-
-    const modulos = cargarModulos();
-    modulos.push(nuevoModulo);
-    guardarModulos(modulos);
+    try {
+      await conBoton(form.querySelector("button[type=submit]"), () =>
+        crearModulo({
+          titulo: tituloInput || tituloLink || "Nuevo módulo",
+          descripcion: descripcionInput,
+          categoria: document.getElementById("contenidoCategoria").value,
+          embedSrc: src,
+          fuente: fuente && /^https:\/\//i.test(fuente) ? fuente : ""
+        })
+      );
+    } catch (err) {
+      errorEl.textContent = err.message;
+      return;
+    }
 
     form.reset();
     renderModulos();
     renderTablaModulosAdmin();
+    renderProgreso();
     actualizarStatsBienvenida();
     poblarSelectModulosIA();
-    alert("Módulo agregado correctamente. Ya está disponible en 'Inicio / Módulos'.");
+    alert("Módulo agregado correctamente. Ya está disponible en 'Inicio / Módulos' para todos los usuarios.");
   });
 }
 
@@ -206,44 +307,56 @@ function renderTablaModulosAdmin() {
       (m, idx) => `
         <tr>
           <td>Módulo ${idx + 1} · ${escapeHtml(m.titulo)}</td>
-          <td><button class="table-delete-btn" data-modulo-admin-id="${m.id}" title="Eliminar módulo">✕</button></td>
+          <td><button class="table-delete-btn" data-modulo-admin-id="${escapeHtml(m.id)}" title="Eliminar módulo">✕</button></td>
         </tr>
       `
     )
     .join("");
 
   tbody.querySelectorAll("[data-modulo-admin-id]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       if (!confirm("¿Eliminar este módulo? Se quitará de la vista de todos los usuarios.")) return;
-      eliminarModulo(btn.dataset.moduloAdminId);
-      renderTablaModulosAdmin();
-      renderModulos();
-      renderProgreso();
-      actualizarStatsBienvenida();
-      poblarSelectModulosIA();
+      try {
+        await conBoton(btn, () => eliminarModulo(btn.dataset.moduloAdminId));
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
+      refrescarTodo();
     });
   });
 }
 
 /* ==========================================================
-   ENTRENAR ASISTENTE IA
+   ENTRENAR ASISTENTE IA (respuestas manuales)
    ========================================================== */
 
 const IA_IMAGEN_MAX_BYTES = 1.5 * 1024 * 1024;
 
 function poblarSelectModulosIA() {
-  const select = document.getElementById("iaModulo");
-  if (!select) return;
-  const valorActual = select.value;
   const modulos = cargarModulos();
+  ["iaModulo", "kbModulo"].forEach((id) => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    const valorActual = select.value;
 
-  select.innerHTML =
-    `<option value="">Ninguno</option>` +
-    modulos
-      .map((m, idx) => `<option value="${m.id}">Módulo ${idx + 1} · ${escapeHtml(m.titulo)}</option>`)
-      .join("");
+    select.innerHTML =
+      `<option value="">Ninguno</option>` +
+      modulos
+        .map((m, idx) => `<option value="${escapeHtml(m.id)}">Módulo ${idx + 1} · ${escapeHtml(m.titulo)}</option>`)
+        .join("");
 
-  if (modulos.some((m) => m.id === valorActual)) select.value = valorActual;
+    if (modulos.some((m) => m.id === valorActual)) select.value = valorActual;
+  });
+}
+
+function leerComoDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen. Intenta con otro archivo."));
+    reader.readAsDataURL(file);
+  });
 }
 
 function inicializarFormIA() {
@@ -254,21 +367,17 @@ function inicializarFormIA() {
 
   poblarSelectModulosIA();
 
-  imagenInput.addEventListener("change", () => {
+  imagenInput.addEventListener("change", async () => {
     const file = imagenInput.files[0];
     if (!file) {
       imagenPreview.style.display = "none";
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      imagenPreview.src = reader.result;
-      imagenPreview.style.display = "block";
-    };
-    reader.readAsDataURL(file);
+    imagenPreview.src = await leerComoDataUrl(file);
+    imagenPreview.style.display = "block";
   });
 
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     errorEl.textContent = "";
 
@@ -292,32 +401,24 @@ function inicializarFormIA() {
       return;
     }
 
-    function guardarEntrada(imagenDataUrl) {
-      const kb = cargarChatKb();
-      kb.push({
-        keywords,
-        respuesta,
-        imagen: imagenDataUrl || "",
-        moduloId: moduloId || ""
-      });
-      guardarChatKb(kb);
-
-      form.reset();
-      imagenPreview.style.display = "none";
-      renderTablaIA();
-      alert("Respuesta agregada. El asistente virtual ya puede usarla en el chat.");
+    try {
+      await conBoton(form.querySelector("button[type=submit]"), async () =>
+        crearEntradaChatKb({
+          keywords,
+          respuesta,
+          imagen: file ? await leerComoDataUrl(file) : "",
+          moduloId: moduloId || ""
+        })
+      );
+    } catch (err) {
+      errorEl.textContent = err.message;
+      return;
     }
 
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => guardarEntrada(reader.result);
-      reader.onerror = () => {
-        errorEl.textContent = "No se pudo leer la imagen. Intenta con otro archivo.";
-      };
-      reader.readAsDataURL(file);
-    } else {
-      guardarEntrada("");
-    }
+    form.reset();
+    imagenPreview.style.display = "none";
+    renderTablaIA();
+    alert("Respuesta agregada. El asistente virtual ya puede usarla en el chat.");
   });
 }
 
@@ -327,9 +428,9 @@ function renderTablaIA() {
   const modulos = cargarModulos();
 
   tbody.innerHTML = kb
-    .map((item, idx) => {
+    .map((item) => {
       const imagenCelda = item.imagen
-        ? `<img src="${item.imagen}" class="admin-img-thumb" alt="Imagen de la respuesta">`
+        ? `<img src="${escapeHtml(item.imagen)}" class="admin-img-thumb" alt="Imagen de la respuesta">`
         : "—";
 
       const moduloVinculado = item.moduloId ? modulos.find((m) => m.id === item.moduloId) : null;
@@ -341,20 +442,166 @@ function renderTablaIA() {
           <td>${escapeHtml(item.respuesta)}</td>
           <td>${imagenCelda}</td>
           <td>${moduloCelda}</td>
-          <td><button class="table-delete-btn" data-ia-idx="${idx}" title="Eliminar respuesta">✕</button></td>
+          <td><button class="table-delete-btn" data-ia-id="${escapeHtml(item.id)}" title="Eliminar respuesta">✕</button></td>
         </tr>
       `;
     })
     .join("");
 
-  tbody.querySelectorAll("[data-ia-idx]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+  tbody.querySelectorAll("[data-ia-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
       if (!confirm("¿Eliminar esta respuesta del asistente?")) return;
-      const idx = Number(btn.dataset.iaIdx);
-      const kbActual = cargarChatKb();
-      kbActual.splice(idx, 1);
-      guardarChatKb(kbActual);
+      try {
+        await conBoton(btn, () => eliminarEntradaChatKb(btn.dataset.iaId));
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
       renderTablaIA();
+    });
+  });
+}
+
+/* ==========================================================
+   DOCUMENTOS DE ENTRENAMIENTO (PDF, Word, imágenes, TXT)
+   ========================================================== */
+
+const KB_ARCHIVO_MAX_BYTES = 30 * 1024 * 1024;
+const KB_NOMBRES_TIPO = { pdf: "PDF", docx: "Word", imagen: "Imagen", txt: "Texto" };
+
+function inicializarDocumentosIA() {
+  const dropzone = document.getElementById("kbDropzone");
+  const input = document.getElementById("kbArchivos");
+  if (!dropzone || !input) return;
+
+  input.addEventListener("change", () => {
+    procesarArchivosKb(Array.from(input.files));
+    input.value = "";
+  });
+
+  ["dragenter", "dragover"].forEach((ev) =>
+    dropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropzone.classList.add("is-dragover");
+    })
+  );
+  ["dragleave", "drop"].forEach((ev) =>
+    dropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("is-dragover");
+    })
+  );
+  dropzone.addEventListener("drop", (e) => procesarArchivosKb(Array.from(e.dataTransfer.files)));
+}
+
+let kbProcesando = false;
+
+async function procesarArchivosKb(archivos) {
+  if (!archivos.length) return;
+  if (kbProcesando) {
+    alert("Espera a que termine de procesarse el archivo actual.");
+    return;
+  }
+
+  const errorEl = document.getElementById("kbError");
+  const progresoWrap = document.getElementById("kbProgreso");
+  const progresoTexto = document.getElementById("kbProgresoTexto");
+  const progresoBarra = document.getElementById("kbProgresoBarra");
+  const dropzone = document.getElementById("kbDropzone");
+  const descripcion = document.getElementById("kbDescripcion").value.trim();
+  const moduloId = document.getElementById("kbModulo").value;
+
+  kbProcesando = true;
+  dropzone.classList.add("is-busy");
+  errorEl.textContent = "";
+  progresoWrap.style.display = "";
+
+  const errores = [];
+  let exitosos = 0;
+
+  for (let i = 0; i < archivos.length; i++) {
+    const file = archivos[i];
+    const prefijo = archivos.length > 1 ? `(${i + 1}/${archivos.length}) ` : "";
+
+    if (file.size > KB_ARCHIVO_MAX_BYTES) {
+      errores.push(`${file.name}: supera 30 MB.`);
+      continue;
+    }
+
+    try {
+      await kbProcesarArchivo(file, { descripcion, moduloId }, (mensaje, fraccion) => {
+        progresoTexto.textContent = `${prefijo}${file.name} — ${mensaje}`;
+        progresoBarra.style.width = Math.round((fraccion || 0) * 100) + "%";
+      });
+      exitosos++;
+      renderTablaKb();
+    } catch (err) {
+      console.error(err);
+      errores.push(`${file.name}: ${err.message || "error al procesar."}`);
+    }
+  }
+
+  kbProcesando = false;
+  dropzone.classList.remove("is-busy");
+  progresoWrap.style.display = "none";
+  progresoBarra.style.width = "0%";
+  errorEl.textContent = errores.join(" · ");
+
+  if (exitosos) {
+    document.getElementById("kbDescripcion").value = "";
+    document.getElementById("kbModulo").value = "";
+    alert(
+      exitosos === 1
+        ? "Documento agregado. El asistente ya puede responder con su contenido."
+        : `${exitosos} documentos agregados. El asistente ya puede responder con su contenido.`
+    );
+  }
+}
+
+async function renderTablaKb() {
+  const tbody = document.getElementById("tablaKbBody");
+  if (!tbody) return;
+
+  let docs = [];
+  try {
+    docs = await KBDocs.listar();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="admin-table__empty">${escapeHtml(e.message)}</td></tr>`;
+    return;
+  }
+
+  if (!docs.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="admin-table__empty">Aún no hay documentos. Sube el primero arriba.</td></tr>`;
+    return;
+  }
+
+  docs.sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+  tbody.innerHTML = docs
+    .map((d) => {
+      const fecha = new Date(d.fecha).toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" });
+      const thumb = d.miniatura ? `<img src="${d.miniatura}" class="admin-img-thumb" alt="">` : "";
+      const desc = d.descripcion ? `<span class="kb-doc__desc">${escapeHtml(d.descripcion)}</span>` : "";
+      const nombre = d.archivo
+        ? `<a href="${escapeHtml(d.archivo)}" target="_blank" rel="noopener" title="Abrir archivo original">${escapeHtml(d.nombre)} ↗</a>`
+        : escapeHtml(d.nombre);
+      return `
+        <tr>
+          <td><div class="kb-doc">${thumb}<div><strong>${nombre}</strong>${desc}</div></div></td>
+          <td>${KB_NOMBRES_TIPO[d.tipo] || escapeHtml(d.tipo)}</td>
+          <td>${d.chunks.length}</td>
+          <td>${escapeHtml(d.subidoPor || "—")}</td>
+          <td>${fecha}</td>
+          <td><button class="table-delete-btn" data-kb-id="${d.id}" title="Eliminar documento">✕</button></td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  tbody.querySelectorAll("[data-kb-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("¿Eliminar este documento? El asistente dejará de usar su contenido.")) return;
+      await KBDocs.eliminar(btn.dataset.kbId);
+      renderTablaKb();
     });
   });
 }

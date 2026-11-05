@@ -764,7 +764,14 @@ button { font-family: inherit; cursor: pointer; }
   line-height: 1.45;
 }
 
-.chat-msg p { margin: 0; }
+.chat-msg p { margin: 0; white-space: pre-line; }
+
+.chat-msg__source {
+  display: block;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+}
 
 .chat-msg--bot {
   background: #fff;
@@ -1295,3 +1302,44 @@ button { font-family: inherit; cursor: pointer; }
 .card--highlight {
   animation: cardHighlight 2.2s ease;
 }
+
+/* ==========================================================
+   DOCUMENTOS DE ENTRENAMIENTO (panel IA)
+   ========================================================== */
+
+.admin-panel__subtitle { margin-top: 32px; }
+
+.kb-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border: 2px dashed var(--color-border);
+  border-radius: 14px;
+  background: var(--color-bg);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.kb-dropzone .icon { width: 30px; height: 30px; color: var(--color-primary-light); }
+.kb-dropzone strong { color: var(--color-text); font-size: 14px; }
+.kb-dropzone span { color: var(--color-text-muted); font-size: 12.5px; font-weight: 400; }
+
+.kb-dropzone:hover,
+.kb-dropzone.is-dragover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-light);
+}
+
+.kb-dropzone.is-busy { opacity: 0.6; pointer-events: none; }
+
+.kb-progress { display: flex; flex-direction: column; gap: 6px; }
+.kb-progress__label { font-size: 13px; color: var(--color-text-muted); }
+
+.kb-doc { display: flex; align-items: center; gap: 10px; }
+.kb-doc strong { display: block; word-break: break-word; }
+.kb-doc__desc { display: block; font-size: 12px; color: var(--color-text-muted); }
+
+.admin-table__empty { color: var(--color-text-muted); text-align: center; }

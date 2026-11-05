@@ -1,17 +1,10 @@
-document.addEventListener("DOMContentLoaded", () => {
-  seedDefaultUsers();
-
-  // Si ya hay una sesión activa, entra directo al sistema
-  if (getSesion()) {
-    window.location.href = "index.html";
-    return;
-  }
-
+document.addEventListener("DOMContentLoaded", async () => {
   const form = document.getElementById("loginForm");
   const userInput = document.getElementById("loginUser");
   const passInput = document.getElementById("loginPass");
   const errorEl = document.getElementById("loginError");
   const toggleBtn = document.getElementById("togglePass");
+  const submitBtn = form.querySelector("button[type=submit]");
 
   toggleBtn.addEventListener("click", () => {
     const mostrando = passInput.type === "text";
@@ -19,18 +12,22 @@ document.addEventListener("DOMContentLoaded", () => {
     toggleBtn.classList.toggle("is-active", !mostrando);
   });
 
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     errorEl.textContent = "";
+    submitBtn.disabled = true;
 
-    const sesion = login(userInput.value, passInput.value);
-    if (!sesion) {
-      errorEl.textContent = "Usuario o contraseña incorrectos.";
+    try {
+      await login(userInput.value, passInput.value);
+      window.location.href = "index.html";
+    } catch (err) {
+      errorEl.textContent = err.message;
       passInput.value = "";
       passInput.focus();
-      return;
+      submitBtn.disabled = false;
     }
-
-    window.location.href = "index.html";
   });
+
+  // Si ya hay una sesión activa, entra directo al sistema
+  if (await cargarSesion()) window.location.href = "index.html";
 });

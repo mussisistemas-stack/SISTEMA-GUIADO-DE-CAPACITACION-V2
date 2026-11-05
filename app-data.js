@@ -1,8 +1,8 @@
 /* ==========================================================================
    app-data.js
    Datos semilla (por defecto) para módulos y base de conocimiento del
-   asistente IA. Se cargan en localStorage la primera vez que se abre la app;
-   después de eso, lo que se ve en pantalla sale de localStorage (incluido
+   asistente IA. El servidor (server.js) los usa SOLO la primera vez que
+   arranca, para crear data/db.json; después de eso todo sale de ahí (incluido
    todo lo que agregue un Administrador desde el panel).
    ========================================================================== */
 
