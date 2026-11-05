@@ -734,6 +734,9 @@ async function manejarApi(req, res, url) {
 async function servirEstatico(req, res, url) {
   let rel = decodeURIComponent(url.pathname);
   if (rel === "/") rel = "/index.html";
+  // Direcciones sin ".html" (ej. /login, /index): el servidor anterior las usaba
+  // y el navegador las recuerda, así que se aceptan igual.
+  if (!path.extname(rel) && fs.existsSync(path.join(ROOT, rel + ".html"))) rel += ".html";
 
   // La app principal solo con sesión iniciada
   if (rel === "/index.html" && !usuarioDeReq(req)) {
@@ -761,6 +764,19 @@ const server = http.createServer(async (req, res) => {
       enviarJson(res, err.status || 500, { error: err instanceof ErrorHttp ? err.message : "Error del servidor" });
     }
   }
+});
+
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`\n  ✘ El puerto ${PORT} ya está ocupado por otro programa, así que el servidor NO arrancó.`);
+    console.error(`    Causas típicas:`);
+    console.error(`      - Otra ventana de iniciar-servidor.bat (versión anterior) sigue abierta: ciérrala.`);
+    console.error(`      - VS Code con "Live Server" encendido: en la barra inferior de VS Code`);
+    console.error(`        haz clic en "Port : ${PORT}" para detenerlo.`);
+    console.error(`    Luego vuelve a abrir iniciar-servidor.bat.\n`);
+    process.exit(1);
+  }
+  throw err;
 });
 
 server.listen(PORT, "0.0.0.0", () => {

@@ -52,6 +52,11 @@ async function api(url, opciones) {
     throw new Error((data && data.error) || "Sesión expirada.");
   }
   if (!res.ok) {
+    if ((res.status === 404 || res.status === 405) && !data) {
+      throw new Error(
+        "La app se abrió con un servidor antiguo. Cierra la ventana negra del servidor y vuelve a abrir iniciar-servidor.bat."
+      );
+    }
     throw new Error((data && data.error) || "Error del servidor (" + res.status + ").");
   }
   return data;
