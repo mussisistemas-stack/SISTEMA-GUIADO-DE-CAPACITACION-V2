@@ -79,7 +79,7 @@
     <main class="content">
 
       <!-- ===== BIENVENIDA ===== -->
-      <section class="welcome" id="modulos">
+      <section class="welcome" id="modulos" data-view="modulos">
         <div class="welcome__text">
           <h2>Hola, <span id="welcomeNombre">Asistente</span> 👋</h2>
           <p>Bienvenido al sistema guiado de capacitación de <strong>Front Retail</strong>. Completa los módulos en orden para dominar las operaciones de punto de venta, caja y atención al cliente.</p>
@@ -97,7 +97,7 @@
       </section>
 
       <!-- ===== GRID DE MÓDULOS ===== -->
-      <section class="modules">
+      <section class="modules" data-view="modulos">
         <div class="section-heading">
           <h3>Módulos Operativos</h3>
           <p>Selecciona un módulo para comenzar o continuar tu capacitación.</p>
@@ -108,38 +108,94 @@
       </section>
 
       <!-- ===== BIBLIOTECA DE RECURSOS ===== -->
-      <section class="resources" id="biblioteca">
-        <div class="section-heading">
-          <h3>Biblioteca de Recursos</h3>
-          <p>Manuales, guías rápidas y material de apoyo descargable.</p>
-        </div>
-        <div class="resources__grid">
-          <div class="resource-item">
-            <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6"/></svg>
-            <div>
-              <strong>Manual de Procedimientos POS</strong>
-              <span>PDF · 2.4 MB</span>
-            </div>
+      <section class="resources" id="biblioteca" data-view="biblioteca" hidden style="display:none;">
+        <div class="bib-header">
+          <div class="section-heading">
+            <h3>Biblioteca de Recursos</h3>
+            <p>Manuales, guías rápidas, videos y material de consulta del sistema.</p>
           </div>
-          <div class="resource-item">
-            <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6"/></svg>
-            <div>
-              <strong>Guía de Arqueo de Caja</strong>
-              <span>PDF · 1.1 MB</span>
-            </div>
-          </div>
-          <div class="resource-item">
-            <svg class="icon" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z M14 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/></svg>
-            <div>
-              <strong>Video: Política de Devoluciones</strong>
-              <span>MP4 · 8 min</span>
-            </div>
+          <div class="bib-header__actions">
+            <span class="bib-readonly-pill" id="bibSoloLecturaBadge" style="display:none;">Solo visualización</span>
+            <button type="button" class="card__btn bib-add-btn" id="btnToggleSubirBib" style="display:none;">+ Añadir documento</button>
           </div>
         </div>
+
+        <!-- Formulario de carga (exclusivo para Administrador) -->
+        <div class="admin-panel bib-upload-panel" id="bibUploadPanel" style="display:none;">
+          <div class="bib-upload-panel__top">
+            <div>
+              <h4>Subir documento o recurso a la Biblioteca</h4>
+              <p class="admin-panel__hint">Solo el <strong>Administrador</strong> puede añadir o eliminar recursos aquí. Los usuarios con rol <strong>Asesor</strong> y <strong>Aprendiz</strong> únicamente podrán visualizarlos.</p>
+            </div>
+            <button type="button" class="card__btn card__btn--outline bib-close-upload" id="btnCerrarSubirBib">Cancelar</button>
+          </div>
+
+          <form id="formBiblioteca" class="admin-form">
+            <label class="kb-dropzone" id="bibDropzone" for="bibArchivo">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              <strong id="bibArchivoNombre">Arrastra un archivo aquí o haz clic para seleccionarlo</strong>
+              <span>PDF, Word (.docx), Imágenes (PNG/JPG), Videos (MP4/WebM), Excel, PPT o TXT · máx. 100 MB</span>
+              <input type="file" id="bibArchivo" accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.mp4,.webm,.mp3,.png,.jpg,.jpeg,.webp,.gif,.svg,.txt,.md,.csv" hidden>
+            </label>
+
+            <div class="admin-form__row">
+              <div>
+                <label for="bibTitulo">Título del recurso</label>
+                <input type="text" id="bibTitulo" placeholder="Ej: Manual de Procedimientos POS (se toma del archivo si se deja vacío)">
+              </div>
+              <div>
+                <label for="bibCategoria">Categoría</label>
+                <select id="bibCategoria">
+                  <option value="manual">Manual</option>
+                  <option value="guia">Guía rápida</option>
+                  <option value="video">Video</option>
+                  <option value="formato">Formato / Política</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="admin-form__row">
+              <div>
+                <label for="bibDescripcion">Descripción breve (opcional)</label>
+                <input type="text" id="bibDescripcion" placeholder="Ej: Pasos para apertura, facturación y arqueo de caja">
+              </div>
+              <div>
+                <label for="bibUrlExterna">O enlace externo HTTPS (opcional, si no subes archivo)</label>
+                <input type="text" id="bibUrlExterna" placeholder="https://www.canva.com/... o enlace de video/documento">
+              </div>
+            </div>
+
+            <div class="kb-progress" id="bibUploadProgreso" style="display:none;">
+              <div class="kb-progress__label" id="bibUploadTexto">Subiendo archivo…</div>
+              <div class="progress-bar"><div class="progress-bar__fill" id="bibUploadBarra" style="width:0%;"></div></div>
+            </div>
+
+            <span class="admin-form__error" id="bibError"></span>
+            <div>
+              <button type="submit" class="card__btn" id="btnGuardarBib">Publicar en Biblioteca</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Barra de búsqueda y filtro -->
+        <div class="bib-toolbar">
+          <input type="search" id="bibBuscar" class="bib-toolbar__search" placeholder="Buscar por título o descripción...">
+          <select id="bibFiltroCategoria" class="bib-toolbar__select">
+            <option value="todas">Todas las categorías</option>
+            <option value="manual">Manuales</option>
+            <option value="guia">Guías rápidas</option>
+            <option value="video">Videos</option>
+            <option value="formato">Formatos / Políticas</option>
+            <option value="otro">Otros</option>
+          </select>
+        </div>
+
+        <div class="resources__grid" id="bibliotecaGrid"></div>
       </section>
 
       <!-- ===== SOPORTE TÉCNICO ===== -->
-      <section class="support" id="soporte">
+      <section class="support" id="soporte" data-view="soporte" hidden style="display:none;">
         <div class="section-heading">
           <h3>Soporte Técnico</h3>
           <p>¿Tienes un problema con el sistema? Contacta al equipo o revisa el chat de asistencia.</p>
@@ -154,7 +210,7 @@
       </section>
 
       <!-- ===== MI PROGRESO ===== -->
-      <section class="progress-section" id="progreso">
+      <section class="progress-section" id="progreso" data-view="progreso" hidden style="display:none;">
         <div class="section-heading">
           <h3 id="progresoTitulo">Mi Progreso</h3>
           <p id="progresoSubtitulo">Resumen general de tu avance en la capacitación.</p>
@@ -164,7 +220,7 @@
       </section>
 
       <!-- ===== ADMINISTRACIÓN (solo visible para el rol Administrador) ===== -->
-      <section class="admin-section" id="administracion" style="display:none;">
+      <section class="admin-section" id="administracion" data-view="administracion" hidden style="display:none;">
         <div class="section-heading">
           <h3>Administración</h3>
           <p>Gestiona usuarios, contenido de módulos y las respuestas del asistente virtual.</p>
@@ -173,6 +229,7 @@
         <div class="admin-tabs">
           <button class="admin-tab is-active" data-tab="usuarios">Usuarios</button>
           <button class="admin-tab" data-tab="contenido">Contenido</button>
+          <button class="admin-tab" data-tab="biblioteca">Biblioteca</button>
           <button class="admin-tab" data-tab="ia">Asistente IA</button>
         </div>
 
@@ -263,9 +320,83 @@
           </table>
         </div>
 
+        <!-- ---- Gestión de Biblioteca de Recursos ---- -->
+        <div class="admin-panel" id="panelBiblioteca" data-panel="biblioteca" style="display:none;">
+          <div class="bib-upload-panel__top">
+            <div>
+              <h4>Documentos de la Biblioteca de Recursos</h4>
+              <p class="admin-panel__hint">Todo lo que subas aquí o desde el botón <strong>"+ Añadir documento"</strong> en <em>Biblioteca de Recursos</em> queda disponible en modo visualización para Asesores y Aprendices.</p>
+            </div>
+            <button type="button" class="card__btn" id="btnIrSubirBiblioteca">+ Añadir documento</button>
+          </div>
+
+          <table class="admin-table">
+            <thead>
+              <tr><th>Título</th><th>Categoría</th><th>Formato / Tamaño</th><th>Subido por</th><th>Fecha</th><th></th></tr>
+            </thead>
+            <tbody id="tablaBibliotecaAdminBody"></tbody>
+          </table>
+        </div>
+
         <!-- ---- Entrenar Asistente IA ---- -->
         <div class="admin-panel" id="panelIA" data-panel="ia" style="display:none;">
-          <h4>Documentos de entrenamiento</h4>
+          <div class="ollama-box">
+            <div class="ollama-box__header">
+              <div>
+                <h4>Motor de IA Gratuita Local (Ollama)</h4>
+                <p class="admin-panel__hint">Conecta <strong>Ollama</strong> en este servidor de forma 100% gratuita y privada. La IA lee automáticamente <strong>todas las respuestas actuales del asistente</strong>, tus <strong>documentos de entrenamiento</strong>, los <strong>módulos</strong> y la <strong>Biblioteca</strong> para analizar, relacionar y comparar procedimientos con sus propias palabras (ej: explicar en qué se diferencia un cambio de una devolución).</p>
+              </div>
+              <div class="ollama-box__status-wrap">
+                <span class="ollama-badge" id="ollamaEstadoBadge">Verificando…</span>
+                <button type="button" class="card__btn card__btn--outline ollama-check-btn" id="btnProbarOllama">Verificar conexión</button>
+              </div>
+            </div>
+
+            <form id="formOllamaConfig" class="admin-form">
+              <label class="admin-checkbox ollama-toggle">
+                <input type="checkbox" id="ollamaHabilitado" checked>
+                <span>Usar Ollama para analizar las respuestas actuales y redactar contestaciones inteligentes</span>
+              </label>
+
+              <div class="admin-form__row">
+                <div>
+                  <label for="ollamaModelo">Modelo de Ollama (recomendado en CPU: <code>llama3.2:3b</code>)</label>
+                  <input type="text" id="ollamaModelo" list="ollamaModelosLista" placeholder="llama3.2:3b" value="llama3.2:3b">
+                  <datalist id="ollamaModelosLista">
+                    <option value="llama3.2:3b"></option>
+                    <option value="qwen2.5:3b"></option>
+                    <option value="gemma2:2b"></option>
+                  </datalist>
+                </div>
+                <div>
+                  <label for="ollamaUrl">URL local de Ollama en el servidor</label>
+                  <input type="text" id="ollamaUrl" value="http://127.0.0.1:11434" placeholder="http://127.0.0.1:11434">
+                </div>
+              </div>
+
+              <label for="ollamaInstrucciones">Instrucciones de comportamiento y análisis (Prompt del sistema)</label>
+              <textarea id="ollamaInstrucciones" rows="3"></textarea>
+
+              <div class="ollama-guide" id="ollamaGuiaInstalacion" style="display:none;">
+                <strong>¿Aún no tienes Ollama activo en este servidor? (100% gratis):</strong>
+                <ol>
+                  <li>Descarga e instala Ollama para Windows desde <code>https://ollama.com/download</code></li>
+                  <li>Abre una consola (CMD o PowerShell) y descarga el modelo rápido recomendado ejecutando: <code>ollama pull llama3.2:3b</code></li>
+                  <li>Haz clic abajo en <strong>«Entrenar / Sincronizar con respuestas actuales»</strong> y quedará listo en memoria RAM.</li>
+                </ol>
+              </div>
+
+              <span class="admin-form__error" id="ollamaError"></span>
+              <div class="ollama-actions">
+                <button type="submit" class="card__btn" id="btnGuardarOllama">Guardar configuración de IA</button>
+                <button type="button" class="card__btn card__btn--outline ollama-train-btn" id="btnEntrenarOllama">🧠 Entrenar / Sincronizar con respuestas actuales</button>
+              </div>
+
+              <div class="ollama-train-result" id="ollamaResultadoEntrenamiento" style="display:none;"></div>
+            </form>
+          </div>
+
+          <h4 class="admin-panel__subtitle">Documentos de entrenamiento</h4>
           <p class="admin-panel__hint">Sube manuales, guías o capturas de pantalla. El asistente leerá su contenido y lo usará para responder las preguntas del chat. Formatos: <strong>PDF</strong>, <strong>Word (.docx)</strong>, <strong>imágenes (PNG/JPG)</strong> y <strong>.txt</strong>. Las imágenes y los PDF escaneados se leen con reconocimiento de texto (OCR), que puede tardar unos segundos por página.</p>
           <div class="admin-form">
             <label class="kb-dropzone" id="kbDropzone" for="kbArchivos">
@@ -348,7 +479,7 @@
         <div class="chat-window__avatar">🤖</div>
         <div>
           <strong>Asistente Virtual de Soporte</strong>
-          <span>En línea</span>
+          <span id="chatStatusText">En línea</span>
         </div>
       </div>
       <button class="chat-window__close" id="chatCloseBtn" aria-label="Cerrar chat">
@@ -377,6 +508,27 @@
         <svg class="icon" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
       </button>
     </form>
+  </div>
+
+  <!-- ============ VISOR DE DOCUMENTOS (BIBLIOTECA) ============ -->
+  <div class="bib-modal" id="bibModal" hidden style="display:none;">
+    <div class="bib-modal__backdrop" id="bibModalBackdrop"></div>
+    <div class="bib-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="bibModalTitulo">
+      <div class="bib-modal__header">
+        <div class="bib-modal__title-wrap">
+          <span class="card__badge card__badge--ops" id="bibModalCategoria">Manual</span>
+          <div>
+            <h4 id="bibModalTitulo">Documento</h4>
+            <span id="bibModalMeta"></span>
+          </div>
+        </div>
+        <div class="bib-modal__actions">
+          <a id="bibModalAbrirNueva" class="card__btn card__btn--outline bib-modal__open-link" href="#" target="_blank" rel="noopener" style="display:none;">Abrir en pestaña ↗</a>
+          <button type="button" class="bib-modal__close" id="bibModalCerrar" aria-label="Cerrar visor">✕</button>
+        </div>
+      </div>
+      <div class="bib-modal__body" id="bibModalBody"></div>
+    </div>
   </div>
 
   <script src="auth.js"></script>

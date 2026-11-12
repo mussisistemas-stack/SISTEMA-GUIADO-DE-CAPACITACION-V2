@@ -13,6 +13,51 @@ const NOMBRES_ROL = {
   aprendiz: "Aprendiz"
 };
 
+/* ---------- Configuración de Red Local y Externa (estilo MUSSI) ---------- */
+
+const MUSSI_NET_CONFIG = {
+  PORT: "3006",
+  EXTERNAL_IP: "186.81.6.227",
+  get BASE_URL() {
+    if (typeof window === "undefined") return "http://localhost:3006";
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+    const port = window.location.port || (window.location.protocol === "https:" ? "" : this.PORT);
+    if (!hostname || window.location.protocol === "file:") {
+      return `http://localhost:${this.PORT}`;
+    }
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return `${protocol}//${hostname}${port ? ":" + port : ""}`;
+    }
+    if (hostname === this.EXTERNAL_IP) {
+      return `${protocol}//${this.EXTERNAL_IP}${port ? ":" + port : ""}`;
+    }
+    return `${protocol}//${hostname}${port ? ":" + port : ""}`;
+  }
+};
+
+if (typeof window !== "undefined") {
+  window.API_BASE_URL = MUSSI_NET_CONFIG.BASE_URL + "/api";
+
+  // Asegurar que todas las peticiones fetch envíen la cookie de sesión HttpOnly
+  if (typeof window.fetch === "function" && !window.__mussiFetchPatched) {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = function (input, init = {}) {
+      const opts = Object.assign({}, init);
+      if (!opts.credentials) {
+        opts.credentials = "include";
+      }
+      return originalFetch(input, opts);
+    };
+    window.__mussiFetchPatched = true;
+  }
+}
+
+function resolverUrlServidor(url) {
+  if (!url || /^https?:\/\//i.test(url)) return url;
+  return MUSSI_NET_CONFIG.BASE_URL + (url.startsWith("/") ? url : "/" + url);
+}
+
 let SESION = null;
 let USUARIOS_CACHE = [];
 
@@ -24,7 +69,12 @@ let USUARIOS_CACHE = [];
  */
 async function api(url, opciones) {
   opciones = opciones || {};
-  const init = { method: opciones.method || "GET", headers: {}, cache: "no-store" };
+  const init = {
+    method: opciones.method || "GET",
+    headers: {},
+    cache: "no-store",
+    credentials: "include"
+  };
   if (opciones.body !== undefined) {
     if (opciones.body instanceof Blob) {
       init.body = opciones.body;
@@ -37,7 +87,7 @@ async function api(url, opciones) {
 
   let res;
   try {
-    res = await fetch(url, init);
+    res = await fetch(resolverUrlServidor(url), init);
   } catch (e) {
     throw new Error("No hay conexión con el servidor. Verifica que esté encendido (iniciar-servidor.bat).");
   }

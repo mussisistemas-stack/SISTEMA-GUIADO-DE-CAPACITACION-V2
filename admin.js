@@ -14,11 +14,14 @@ document.addEventListener("app:lista", () => {
   inicializarTabsAdmin();
   inicializarFormUsuario();
   inicializarFormContenido();
+  inicializarAdminBiblioteca();
+  inicializarConfigOllama();
   inicializarFormIA();
   inicializarDocumentosIA();
 
   renderTablaUsuarios();
   renderTablaModulosAdmin();
+  renderTablaBibliotecaAdmin();
   renderTablaIA();
   renderTablaKb();
 
@@ -95,10 +98,12 @@ async function migrarDatosLocales() {
 
 function refrescarTodo() {
   renderModulos();
+  if (typeof renderBiblioteca === "function") renderBiblioteca();
   renderProgreso();
   actualizarStatsBienvenida();
   renderTablaUsuarios();
   renderTablaModulosAdmin();
+  renderTablaBibliotecaAdmin();
   renderTablaIA();
   poblarSelectModulosIA();
 }
@@ -108,8 +113,8 @@ function refrescarTodo() {
    ========================================================== */
 
 function inicializarTabsAdmin() {
-  const tabs = document.querySelectorAll(".admin-tab");
-  const paneles = document.querySelectorAll(".admin-panel");
+  const tabs = document.querySelectorAll("#administracion .admin-tab");
+  const paneles = document.querySelectorAll("#administracion .admin-panel");
 
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -603,5 +608,260 @@ async function renderTablaKb() {
       await KBDocs.eliminar(btn.dataset.kbId);
       renderTablaKb();
     });
+  });
+}
+
+/* ==========================================================
+   GESTIÓN DE BIBLIOTECA DE RECURSOS (desde Administración)
+   ========================================================== */
+
+function inicializarAdminBiblioteca() {
+  const btnIr = document.getElementById("btnIrSubirBiblioteca");
+  if (btnIr) {
+    btnIr.addEventListener("click", () => {
+      if (typeof abrirPanelSubidaBiblioteca === "function") abrirPanelSubidaBiblioteca();
+    });
+  }
+  document.addEventListener("biblioteca:actualizada", renderTablaBibliotecaAdmin);
+}
+
+function renderTablaBibliotecaAdmin() {
+  const tbody = document.getElementById("tablaBibliotecaAdminBody");
+  if (!tbody || typeof cargarBiblioteca !== "function") return;
+
+  const items = cargarBiblioteca();
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="admin-table__empty">Aún no hay recursos publicados en la Biblioteca.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = items
+    .map((item) => {
+      const cat = (typeof BIB_ETIQUETAS_CAT !== "undefined" && BIB_ETIQUETAS_CAT[item.categoria]) || item.categoria;
+      const extTexto = item.ext ? item.ext.replace(".", "").toUpperCase() : item.urlExterna ? "ENLACE" : "DOC";
+      const tam = item.tamano && typeof formatearTamano === "function" ? " · " + formatearTamano(item.tamano) : "";
+      const fecha = item.fecha
+        ? new Date(item.fecha).toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" })
+        : "—";
+
+      return `
+        <tr>
+          <td><strong>${escapeHtml(item.titulo)}</strong></td>
+          <td>${escapeHtml(cat)}</td>
+          <td>${escapeHtml(extTexto + tam)}</td>
+          <td>${escapeHtml(item.subidoPor || "—")}</td>
+          <td>${fecha}</td>
+          <td style="white-space:nowrap;">
+            <button type="button" class="quick-btn" data-admin-bib-ver="${escapeHtml(item.id)}">Ver</button>
+            <button type="button" class="table-delete-btn" data-admin-bib-del="${escapeHtml(item.id)}" title="Eliminar recurso">✕</button>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  tbody.querySelectorAll("[data-admin-bib-ver]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = cargarBiblioteca().find((x) => x.id === btn.dataset.adminBibVer);
+      if (item && typeof abrirVisorBiblioteca === "function") abrirVisorBiblioteca(item);
+    });
+  });
+
+  tbody.querySelectorAll("[data-admin-bib-del]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("¿Eliminar este documento de la Biblioteca de Recursos?")) return;
+      try {
+        await conBoton(btn, () => eliminarRecursoBiblioteca(btn.dataset.adminBibDel));
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+}
+
+/* ==========================================================
+   CONFIGURACIÓN DE OLLAMA (IA LOCAL GRATUITA)
+   ========================================================== */
+
+function pintarEstadoOllama(info) {
+  const badge = document.getElementById("ollamaEstadoBadge");
+  const guia = document.getElementById("ollamaGuiaInstalacion");
+  const datalist = document.getElementById("ollamaModelosLista");
+  const chatStatusText = document.getElementById("chatStatusText");
+  if (!badge) return;
+
+  const modelos = Array.isArray(info.modelos) ? info.modelos : [];
+  if (datalist) {
+    const sugeridos = Array.from(new Set([...modelos, "llama3.2:3b", "qwen2.5:3b", "gemma2:2b"]));
+    datalist.innerHTML = sugeridos.map((m) => `<option value="${escapeHtml(m)}"></option>`).join("");
+  }
+
+  if (info.conectado && modelos.length) {
+    badge.className = "ollama-badge ollama-badge--ok";
+    badge.textContent = info.habilitado
+      ? `🟢 Conectado · Modelo: ${info.modeloActivo || info.modelo}`
+      : `⚪ Conectado (pausado)`;
+    if (guia) guia.style.display = "none";
+    if (chatStatusText) chatStatusText.textContent = info.habilitado ? "En línea · IA Ollama activa" : "En línea";
+  } else if (info.conectado && !modelos.length) {
+    badge.className = "ollama-badge ollama-badge--warn";
+    badge.textContent = "🟠 Ollama encendido sin modelos (ejecuta: ollama pull llama3.2:3b)";
+    if (guia) guia.style.display = "";
+    if (chatStatusText) chatStatusText.textContent = "En línea";
+  } else {
+    badge.className = "ollama-badge ollama-badge--off";
+    badge.textContent = "⚪ Ollama no detectado · Usando búsqueda local";
+    if (guia) guia.style.display = "";
+    if (chatStatusText) chatStatusText.textContent = "En línea";
+  }
+}
+
+async function cargarEstadoOllamaAdmin() {
+  const chk = document.getElementById("ollamaHabilitado");
+  const inputModelo = document.getElementById("ollamaModelo");
+  const inputUrl = document.getElementById("ollamaUrl");
+  const txtInst = document.getElementById("ollamaInstrucciones");
+  try {
+    const info = await api("/api/ia");
+    if (chk) chk.checked = !!info.habilitado;
+    if (inputModelo && info.modelo) inputModelo.value = info.modelo;
+    if (inputUrl && info.url) inputUrl.value = info.url;
+    if (txtInst && info.instrucciones) txtInst.value = info.instrucciones;
+    pintarEstadoOllama(info);
+    return info;
+  } catch (e) {
+    pintarEstadoOllama({ conectado: false, modelos: [] });
+    return null;
+  }
+}
+
+function inicializarConfigOllama() {
+  const form = document.getElementById("formOllamaConfig");
+  const btnProbar = document.getElementById("btnProbarOllama");
+  const btnEntrenar = document.getElementById("btnEntrenarOllama");
+  const panelResultado = document.getElementById("ollamaResultadoEntrenamiento");
+  const errorEl = document.getElementById("ollamaError");
+  if (!form) return;
+
+  cargarEstadoOllamaAdmin();
+
+  function mostrarResultadoEntrenamiento(tipo, htmlContenido) {
+    if (!panelResultado) return;
+    panelResultado.style.display = "block";
+    panelResultado.className = `ollama-train-result ollama-train-result--${tipo}`;
+    panelResultado.innerHTML = htmlContenido;
+  }
+
+  if (btnProbar) {
+    btnProbar.addEventListener("click", () =>
+      conBoton(btnProbar, async () => {
+        errorEl.textContent = "";
+        const info = await cargarEstadoOllamaAdmin();
+        if (info && info.conectado && info.modelos.length) {
+          const r = info.resumenKb || {};
+          mostrarResultadoEntrenamiento(
+            "ok",
+            `<strong>✅ Conexión activa con Ollama</strong><br>` +
+              `Modelos instalados en este servidor: <code>${escapeHtml(info.modelos.join(", "))}</code> · ` +
+              `Modelo en uso: <strong>${escapeHtml(info.modeloActivo)}</strong><br>` +
+              `Base cargada actualmente: <strong>${r.respuestasManuales || 0}</strong> respuestas manuales, ` +
+              `<strong>${r.documentosIa || 0}</strong> documentos IA y <strong>${r.modulos || 0}</strong> módulos.`
+          );
+        } else if (info && info.conectado) {
+          mostrarResultadoEntrenamiento(
+            "err",
+            `<strong>🟠 Ollama está encendido pero sin modelos descargados.</strong><br>` +
+              `Abre CMD en el servidor y ejecuta: <code>ollama pull llama3.2:3b</code>`
+          );
+        } else {
+          mostrarResultadoEntrenamiento(
+            "err",
+            `<strong>⚪ No se detectó Ollama en ejecución en 127.0.0.1:11434.</strong><br>` +
+              `Verifica que la aplicación Ollama esté abierta en este servidor.`
+          );
+        }
+      })
+    );
+  }
+
+  if (btnEntrenar) {
+    btnEntrenar.addEventListener("click", () =>
+      conBoton(btnEntrenar, async () => {
+        errorEl.textContent = "";
+        mostrarResultadoEntrenamiento(
+          "loading",
+          `<strong>⏳ Sincronizando respuestas actuales y cargando el modelo en memoria RAM…</strong><br>` +
+            `La primera carga desde el disco del servidor puede tardar entre 15 y 90 segundos si no tiene tarjeta gráfica dedicada. Por favor espera…`
+        );
+        try {
+          const res = await api("/api/ia/entrenar", {
+            method: "POST",
+            body: {
+              habilitado: document.getElementById("ollamaHabilitado").checked,
+              modelo: document.getElementById("ollamaModelo").value.trim(),
+              url: document.getElementById("ollamaUrl").value.trim(),
+              instrucciones: document.getElementById("ollamaInstrucciones").value.trim()
+            }
+          });
+          pintarEstadoOllama(res);
+
+          if (res && res.ok) {
+            const kb = res.resumenKb || {};
+            const segs = ((res.tiempoMs || 0) / 1000).toFixed(1);
+            const avisoPesado = res.advertenciaModelo
+              ? `<div class="ollama-train-result__warn">💡 ${escapeHtml(res.advertenciaModelo)}</div>`
+              : "";
+            mostrarResultadoEntrenamiento(
+              "ok",
+              `<strong>✅ ¡IA sincronizada y lista en memoria RAM (${segs} s)!</strong><br>` +
+                `Modelo activo: <code>${escapeHtml(res.modeloActivo)}</code> · ` +
+                `Conocimiento analizado: <strong>${kb.respuestasManuales || 0}</strong> respuestas de la tabla, ` +
+                `<strong>${kb.documentosIa || 0}</strong> documentos subidos, ` +
+                `<strong>${kb.modulos || 0}</strong> módulos y <strong>${kb.biblioteca || 0}</strong> recursos de biblioteca.` +
+                avisoPesado +
+                `<div class="ollama-train-result__sample">` +
+                `<span>Prueba automática («${escapeHtml(res.preguntaPrueba)}»):</span>` +
+                `<p>${escapeHtml(res.muestraRespuesta || "")}</p>` +
+                `</div>`
+            );
+          } else {
+            mostrarResultadoEntrenamiento(
+              "err",
+              `<strong>❌ Diagnóstico de Ollama:</strong><br>${escapeHtml((res && res.diagnostico) || "No fue posible completar la prueba.")}`
+            );
+          }
+        } catch (err) {
+          mostrarResultadoEntrenamiento(
+            "err",
+            `<strong>❌ Error al comunicar con el servidor:</strong><br>${escapeHtml(err.message)}`
+          );
+        }
+      })
+    );
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorEl.textContent = "";
+    try {
+      const actualizado = await conBoton(document.getElementById("btnGuardarOllama"), () =>
+        api("/api/ia", {
+          method: "PUT",
+          body: {
+            habilitado: document.getElementById("ollamaHabilitado").checked,
+            modelo: document.getElementById("ollamaModelo").value.trim(),
+            url: document.getElementById("ollamaUrl").value.trim(),
+            instrucciones: document.getElementById("ollamaInstrucciones").value.trim()
+          }
+        })
+      );
+      pintarEstadoOllama(actualizado);
+      mostrarResultadoEntrenamiento(
+        "ok",
+        `<strong>✅ Configuración guardada correctamente.</strong> Haz clic en <em>«Entrenar / Sincronizar con respuestas actuales»</em> si quieres probar y precargar el modelo en memoria RAM ahora mismo.`
+      );
+    } catch (err) {
+      errorEl.textContent = err.message;
+    }
   });
 }

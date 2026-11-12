@@ -305,9 +305,11 @@ function kbExtracto(texto, terminos, maxLen) {
 const KB_API = "/api/docs";
 
 async function kbFetchJson(url, opciones) {
+  const urlFinal = typeof resolverUrlServidor === "function" ? resolverUrlServidor(url) : url;
+  const init = Object.assign({ credentials: "include" }, opciones || {});
   let res;
   try {
-    res = await fetch(url, opciones);
+    res = await fetch(urlFinal, init);
   } catch (e) {
     throw new Error("No hay conexión con el servidor. Verifica que esté encendido (iniciar-servidor.bat).");
   }
